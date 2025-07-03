@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, render_template
 from pymongo import MongoClient, DESCENDING
+from dateutil import parser
 import json
 from datetime import datetime, timezone
 import os
@@ -95,8 +96,9 @@ def process_push_event(payload):
         request_id = payload.get('head_commit', {}).get('id', 'Unknown')
         ref = payload.get('ref', '')
         to_branch = ref.split('/')[-1] if ref.startswith('refs/heads/') else ref
-        timestamp = payload.get('head_commit', {}).get('timestamp', timezone.utc)
-        formatted_time = format_timestamp(timestamp)
+        timestamp_str = payload.get('head_commit', {}).get('timestamp')
+        timestamp_dt = parser.isoparse(timestamp_str) if timestamp_str else datetime.now(timezone.utc)
+        formatted_time = format_timestamp(timestamp_str)
         message = f'"{author}" pushed to "{to_branch}" on {formatted_time}'
 
         action_data = {
@@ -105,7 +107,7 @@ def process_push_event(payload):
             'action': 'PUSH',
             'from_branch': '',
             'to_branch': to_branch,
-            'timestamp': timestamp,
+            'timestamp': timestamp_dt,
             'message': message
         }
         return action_data
@@ -122,18 +124,26 @@ def process_pull_request_event(payload):
         from_branch = pr_data.get('head', {}).get('ref', 'Unknown')
         to_branch = pr_data.get('base', {}).get('ref', 'Unknown')
 
+        timestamp_str = None
         if action == 'opened':
-            timestamp = pr_data.get('created_at', timezone.utc)
-            formatted_time = format_timestamp(timestamp)
+            timestamp_str = pr_data.get('created_at')
             action_type = 'PULL_REQUEST'
-            message = f'"{author}" submitted a pull request from "{from_branch}" to "{to_branch}" on {formatted_time}'
+            message_template = '"{author}" submitted a pull request from "{from_branch}" to "{to_branch}" on {formatted_time}'
         elif action == 'closed' and pr_data.get('merged', False):
-            timestamp = pr_data.get('merged_at', pr_data.get('created_at', timezone.utc))
-            formatted_time = format_timestamp(timestamp)
+            timestamp_str = pr_data.get('merged_at') or pr_data.get('created_at')
             action_type = 'MERGE'
-            message = f'"{author}" merged branch "{from_branch}" to "{to_branch}" on {formatted_time}'
+            message_template = '"{author}" merged branch "{from_branch}" to "{to_branch}" on {formatted_time}'
         else:
             return None
+
+        timestamp_dt = parser.isoparse(timestamp_str) if timestamp_str else datetime.now(timezone.utc)
+        formatted_time = format_timestamp(timestamp_str)
+        message = message_template.format(
+            author=author,
+            from_branch=from_branch,
+            to_branch=to_branch,
+            formatted_time=formatted_time
+        )
 
         action_data = {
             'request_id': request_id,
@@ -141,7 +151,7 @@ def process_pull_request_event(payload):
             'action': action_type,
             'from_branch': from_branch,
             'to_branch': to_branch,
-            'timestamp': timestamp,
+            'timestamp': timestamp_dt,
             'message': message
         }
         return action_data

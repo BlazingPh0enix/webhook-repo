@@ -1,3 +1,6 @@
+"""
+Flask app for handling GitHub webhook events and displaying recent actions.
+"""
 from flask import Flask, jsonify, request, render_template
 from pymongo import MongoClient, DESCENDING
 from dateutil import parser
@@ -6,16 +9,21 @@ from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 
+# MongoDB connection setup
 connection_uri = os.getenv("MONGODB_CONNECTION_STRING")
 client = MongoClient(connection_uri)
 db = client["webhook_db"]
 collection = db["webhook_collection"]
 
 def format_timestamp(timestamp):
+    """
+    Convert ISO timestamp string to a readable UTC format with ordinal day suffix.
+    """
     try:
         if isinstance(timestamp, str) and timestamp.endswith('Z'):
             timestamp = timestamp[:-1] + '+00:00'
@@ -56,6 +64,9 @@ def index():
 
 @app.route('/api/actions', methods=['GET'])
 def get_actions():
+    """
+    API endpoint to get all actions, sorted by timestamp descending.
+    """
     try:
         actions = list(collection.find().sort("timestamp", DESCENDING))
         for action in actions:
@@ -66,6 +77,10 @@ def get_actions():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    """
+    Webhook endpoint to process GitHub push and pull_request events.
+    Stores processed action data in MongoDB.
+    """
     try:
         payload = request.json
         event_type = request.headers.get('X-GitHub-Event')
@@ -91,6 +106,9 @@ def webhook():
         return jsonify({"error": 'Internal Server Error'}), 500
 
 def process_push_event(payload):
+    """
+    Process a GitHub push event payload and return action data dict.
+    """
     try:
         author = payload.get('pusher', {}).get('name', 'Unknown')
         request_id = payload.get('head_commit', {}).get('id', 'Unknown')
@@ -116,6 +134,10 @@ def process_push_event(payload):
         return None
 
 def process_pull_request_event(payload):
+    """
+    Process a GitHub pull_request event payload and return action data dict.
+    Handles both opened and merged PRs.
+    """
     try:
         request_id = payload.get('pull_request', {}).get('id', 'Unknown')
         pr_data = payload.get('pull_request', {})

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Webhook Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #24292e 0%, #2f363d 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        header p {
+            opacity: 0.8;
+            font-size: 1.1rem;
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #28a745;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .actions-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border-radius: 12px;
+            border: 1px solid #e1e4e8;
+        }
+
+        .action-item {
+            background: white;
+            border-bottom: 1px solid #e1e4e8;
+            padding: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-item:last-child {
+            border-bottom: none;
+        }
+
+        .action-item:hover {
+            background: #f8f9fa;
+            transform: translateX(5px);
+        }
+
+        .action-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .action-item.push::before {
+            background: #28a745;
+        }
+
+        .action-item.pull_request::before {
+            background: #0366d6;
+        }
+
+        .action-item.merge::before {
+            background: #6f42c1;
+        }
+
+        .action-item:hover::before {
+            width: 8px;
+        }
+
+        .action-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .action-type {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .action-type.push {
+            background: #dcffe4;
+            color: #28a745;
+        }
+
+        .action-type.pull_request {
+            background: #dbeafe;
+            color: #0366d6;
+        }
+
+        .action-type.merge {
+            background: #f3e8ff;
+            color: #6f42c1;
+        }
+
+        .action-message {
+            font-size: 1.1rem;
+            color: #24292e;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .action-details {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+            color: #586069;
+        }
+
+        .action-detail {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .action-detail strong {
+            color: #24292e;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #586069;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #24292e;
+        }
+
+        .error-state {
+            background: #ffeaa7;
+            color: #d63031;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #d63031;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            color: #586069;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e1e4e8;
+            border-top: 2px solid #0366d6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .action-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .action-details {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GitHub Webhook Monitor</h1>
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span id="status-text">Live</span>
+            </div>
+        </header>
+        
+        <div class="content">
+            {% if error %}
+            <div class="error-state">
+                <strong>Error:</strong> {{ error }}
+            </div>
+            {% endif %}
+            
+            <div id="actions-container" class="actions-container">
+                {% if actions %}
+                    {% for action in actions %}
+                    <div class="action-item {{ action.action.lower() }}">
+                        <div class="action-header">
+                            <span class="action-type {{ action.action.lower() }}">{{ action.action }}</span>
+                        </div>
+                        <div class="action-message">{{ action.message }}</div>
+                        <div class="action-details">
+                            <div class="action-detail">
+                                <strong>Author:</strong> {{ action.author }}
+                            </div>
+                            {% if action.repository %}
+                            <div class="action-detail">
+                                <strong>Repository:</strong> {{ action.repository }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <h3>No GitHub actions yet</h3>
+                        <p>Webhook events will appear here as they occur</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 15 seconds
+        let isRefreshing = false;
+        
+        function refreshActions() {
+            if (isRefreshing) return;
+            
+            isRefreshing = true;
+            const statusText = document.getElementById('status-text');
+            const container = document.getElementById('actions-container');
+            
+            // Show loading state
+            statusText.textContent = 'Updating...';
+            
+            fetch('/api/actions')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.actions) {
+                        updateActionsDisplay(data.actions);
+                        statusText.textContent = 'Live';
+                    } else {
+                        console.error('Failed to fetch actions:', data.error);
+                        statusText.textContent = 'Error';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching actions:', error);
+                    statusText.textContent = 'Offline';
+                })
+                .finally(() => {
+                    isRefreshing = false;
+                });
+        }
+        
+        function updateActionsDisplay(actions) {
+            const container = document.getElementById('actions-container');
+            
+            if (actions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No GitHub actions yet</h3>
+                        <p>Webhook events will appear here as they occur</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const actionsHtml = actions.map(action => `
+                <div class="action-item ${action.action.toLowerCase()}">
+                    <div class="action-header">
+                        <span class="action-type ${action.action.toLowerCase()}">${action.action}</span>
+                    </div>
+                    <div class="action-message">${action.message}</div>
+                    <div class="action-details">
+                        <div class="action-detail">
+                            <strong>Author:</strong> ${action.author}
+                        </div>
+                        ${action.repository ? `
+                        <div class="action-detail">
+                            <strong>Repository:</strong> ${action.repository}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = actionsHtml;
+        }
+        
+        // Start auto-refresh
+        setInterval(refreshActions, 15000); // 15 seconds
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(refreshActions, 1000); // Small delay for initial load
+        });
+    </script>
+</body>
+</html>
